@@ -51,8 +51,12 @@ class Agent:
         # force_x, force_y
         force = [0.0, 0.0]
         if random.randint(0, 400) < self.epsilon:
-            force[0] = random.uniform(-500, 500)
-            force[1] = random.uniform(-500, 500)
+            if random.randint(0, 10) <= 2:
+                force[0] = 0
+                force[1] = 0
+            else:
+                force[0] = random.uniform(-500, 500)
+                force[1] = random.uniform(-500, 500)
         else:
             state0 = torch.tensor(state, dtype=torch.float)
             prediction = self.model(state0)
@@ -86,6 +90,7 @@ def train():
             agent2.n_games += 1
             agent2.train_long_memory()
 
+            # TODO: Fix graph to visualize game scores
             if score > record:
                 record = score
                 agent1.model.save()

@@ -175,21 +175,36 @@ class KlaskSimulator():
         else:
             return self.RewardState.PLAYING.value
 
+    def __is_ball_left_side(self, x_pos) -> bool:
+        return x_pos < (KG_BOARD_WIDTH * self.length_scaler / 2)
+
+    def __is_ball_right_side(self, x_pos) -> bool:
+        return x_pos > (KG_BOARD_WIDTH * self.length_scaler / 2)
+
+    def __ball_move_reward(self, player: PlayerPuck, game_states) -> int:
+        is_ball_move: bool = game_states[22] or game_states[23]
+
+        if player is self.PlayerPuck.P1 and self.__is_ball_left_side(game_states[20]):
+            return 1 if is_ball_move else -1
+        elif player is self.PlayerPuck.P2 and self.__is_ball_right_side(game_states[20]):
+            return 1 if is_ball_move else -1
+        else:
+            return 0
+
     def __calculate_reward(self, player: PlayerPuck, state: RewardState, game_states) -> int:
         reward = 0
 
         reward += state.value
         reward += self.__collide_with_ball_reward(player)
-        # reward += self.__dist_reward(self.bodies[
-        #                              self.PlayerPuck.P1.value if puck_player == self.PlayerPuck.P1 else self.PlayerPuck.P2.value].position,
-        #                              self.bodies["ball"].position)
+        reward += self.__ball_move_reward(player, game_states)
 
         return reward
 
     def step(self, action, puck_player: PlayerPuck):
         # Apply forces to puck1
         self.bodies[puck_player.value].ApplyLinearImpulse((action[0] / 1000, action[1] / 1000), self.bodies[puck_player.value].position, wake=True)
-
+        # if (self.bodies[puck_player.value].position[0] < 1 and self.bodies[puck_player.value].position[1] < 1):
+        #     print(puck_player.value + ": " + str(self.bodies[puck_player.value].position))
         # Apply magnetic forces to biscuits
         for body_key in self.magnet_bodies:
             self.__apply_magnet_force(self.bodies[puck_player.value], self.bodies[body_key])
