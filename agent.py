@@ -10,6 +10,8 @@ from klask_simulator import KlaskSimulator
 from model import Linear_QNet, QTrainer
 from helper import plot
 
+import inquirer
+
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
 LR = 0.05
@@ -66,22 +68,22 @@ class Agent:
         return force[0], force[1]
 
 
-def train():
+def train(mode: str):
     plot_scores = []
     plot_mean_scores = []
     total_score = 0
     record = 0
 
-    game = KlaskSimulator(render_mode="human", target_fps=500)
+    game = KlaskSimulator(render_mode=mode)
     game.reset()
     agent1 = Agent()
     agent2 = Agent()
 
     while True:
         frame, game_state, agent_states, reward, score, done = train_helper(agent1, game, game.PlayerPuck.P1)
-        train_helper(agent2, game, game.PlayerPuck.P2)
+        frame2, game_state2, agent_states2, reward2, score2, done2 = train_helper(agent2, game, game.PlayerPuck.P2)
 
-        if done:
+        if done or done2:
             # train long memory, plot result
             game.reset()
             agent1.n_games += 1
@@ -125,4 +127,14 @@ def train_helper(agent, game, player):
     return frame, game_state, agent_states, reward, score, done
 
 if __name__ == '__main__':
-    train()
+    questions = [
+        inquirer.List(
+            "headless",
+            message="Headless?",
+            choices=["y", "n"],
+            default=["n"]
+        ),
+    ]
+
+    answers = inquirer.prompt(questions)
+    train("headless" if answers["headless"] == "y" else "human")

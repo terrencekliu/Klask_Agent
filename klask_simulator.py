@@ -11,10 +11,9 @@ from PIL import Image
 import pygame
 
 class KlaskSimulator():
-    p1_score = 0
-    p2_score = 0
-    p1_has_magnet = False
-    p2_has_magnet = False
+    # TODO: Reset to zero, just to visualize negative values
+    p1_score = 100
+    p2_score = 100
 
     @dataclass
     class FixtureUserData:
@@ -30,11 +29,13 @@ class KlaskSimulator():
     class RewardState(Enum):
         PUCK_IN_GOAL = 0
         BALL_IN_GOAL = 1000
-        MAGNET = 100
-        SELF_PUCK_IN_GOAL = -100
+        MAGNET = 1000
+        ONE_MAGNET = 1
+        SELF_PUCK_IN_GOAL = -1000
         SELF_BALL_IN_GOAL = -1000
-        SELF_MAGNET = -100
-        HIT_BALL = 100
+        SELF_MAGNET = -1000
+        SELF_ONE_MAG = -1
+        HIT_BALL = 10
         PLAYING = 0
 
     class PlayerPuck(Enum):
@@ -181,18 +182,18 @@ class KlaskSimulator():
     def __is_ball_right_side(self, x_pos) -> bool:
         return x_pos > (KG_BOARD_WIDTH * self.length_scaler / 2)
 
-    def __ball_move_reward(self, player: PlayerPuck, game_states) -> int:
-        is_ball_move: bool = game_states[22] or game_states[23]
+    def __ball_move_reward(self, player: PlayerPuck, game_states) -> float:
+        is_ball_move: bool = game_states[22] > 0.001 or game_states[23] > 0.001
 
         if player is self.PlayerPuck.P1 and self.__is_ball_left_side(game_states[20]):
-            return 1 if is_ball_move else -1
+            return 1 if is_ball_move else -10
         elif player is self.PlayerPuck.P2 and self.__is_ball_right_side(game_states[20]):
-            return 1 if is_ball_move else -1
+            return 1 if is_ball_move else -10
         else:
             return 0
 
-    def __calculate_reward(self, player: PlayerPuck, state: RewardState, game_states) -> int:
-        reward = 0
+    def __calculate_reward(self, player: PlayerPuck, state: RewardState, game_states) -> float:
+        reward = 0.0
 
         reward += state.value
         reward += self.__collide_with_ball_reward(player)
@@ -328,35 +329,56 @@ class KlaskSimulator():
         return state_vector
 
     def __game_state(self, player: PlayerPuck) -> RewardState:
+        # TODO: Remove negative scoring, used to track how well agent is doing
         if player is self.PlayerPuck.P1:
             if self.__is_in_goal(self.bodies["puck2"])[1]:
+                self.p1_score += 1
                 return self.RewardState.PUCK_IN_GOAL
             elif self.__is_in_goal(self.bodies["ball"])[1]:
+                self.p1_score += 1
                 return self.RewardState.BALL_IN_GOAL
+            elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
+                return self.RewardState.ONE_MAGNET
             elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 2:
+                self.p1_score += 1
                 return self.RewardState.MAGNET
 
             if self.__is_in_goal(self.bodies["puck1"])[0]:
+                self.p1_score -= 1
                 return self.RewardState.SELF_PUCK_IN_GOAL
             elif self.__is_in_goal(self.bodies["ball"])[0]:
+                self.p1_score -= 1
                 return self.RewardState.SELF_BALL_IN_GOAL
+            elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
+                return self.RewardState.SELF_ONE_MAG
             elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 2:
+                self.p1_score -= 1
                 return self.RewardState.SELF_MAGNET
 
             return self.RewardState.PLAYING
         else:
             if self.__is_in_goal(self.bodies["puck1"])[0]:
+                self.p2_score += 1
                 return self.RewardState.PUCK_IN_GOAL
             elif self.__is_in_goal(self.bodies["ball"])[0]:
+                self.p2_score += 1
                 return self.RewardState.BALL_IN_GOAL
+            elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
+                return self.RewardState.ONE_MAGNET
             elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 2:
+                self.p2_score += 1
                 return self.RewardState.MAGNET
 
             if self.__is_in_goal(self.bodies["puck2"])[1]:
+                self.p2_score -= 1
                 return self.RewardState.SELF_PUCK_IN_GOAL
             elif self.__is_in_goal(self.bodies["ball"])[1]:
+                self.p2_score -= 1
                 return self.RewardState.SELF_BALL_IN_GOAL
+            elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
+                return self.RewardState.SELF_ONE_MAG
             elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 2:
+                self.p2_score -= 1
                 return self.RewardState.SELF_MAGNET
 
             return self.RewardState.PLAYING
