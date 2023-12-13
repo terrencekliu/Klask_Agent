@@ -1,5 +1,8 @@
 import math
 from enum import unique, Enum
+
+import numpy as np
+
 from klask_constants import *
 
 from Box2D.b2 import contactListener, world, edgeShape, pi
@@ -26,19 +29,20 @@ class KlaskSimulator():
         P1_WIN = 1
         P2_WIN = 2
 
+    @unique
     class RewardState(Enum):
         PUCK_IN_GOAL = 0
-        BALL_IN_GOAL = 1000
-        MAGNET = 1000
-        ONE_MAGNET = 1
-        SELF_PUCK_IN_GOAL = -1000
-        SELF_BALL_IN_GOAL = -1000
-        SELF_MAGNET = -1000
-        SELF_ONE_MAG = -1
-        HIT_BALL = 10
-        PLAYING = 0
+        BALL_IN_GOAL = 1
+        MAGNET = 2
+        ONE_MAGNET = 3
+        SELF_PUCK_IN_GOAL = 4
+        SELF_BALL_IN_GOAL = 5
+        SELF_MAGNET = 6
+        SELF_ONE_MAG = 7
+        HIT_BALL = 8
+        PLAYING = 9
 
-    class PlayerPuck(Enum):
+    class PlayerPuck(str, Enum):
         P1 = "puck1"
         P2 = "puck2"
 
@@ -105,51 +109,109 @@ class KlaskSimulator():
         # Create static bodies
         self.bodies = {}
 
-        self.bodies["wall_bottom"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(0,0), (KG_BOARD_WIDTH * self.length_scaler, 0)]))
-        self.bodies["wall_left"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(0,0), (0, KG_BOARD_HEIGHT * self.length_scaler)]))
-        self.bodies["wall_right"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(KG_BOARD_WIDTH * self.length_scaler, 0), (KG_BOARD_WIDTH * self.length_scaler, KG_BOARD_HEIGHT * self.length_scaler)]))
-        self.bodies["wall_top"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(0, KG_BOARD_HEIGHT * self.length_scaler), (KG_BOARD_WIDTH * self.length_scaler, KG_BOARD_HEIGHT * self.length_scaler)]))
-        self.bodies["divider_left"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(KG_BOARD_WIDTH * self.length_scaler / 2 - KG_DIVIDER_WIDTH * self.length_scaler / 2, 0), (KG_BOARD_WIDTH * self.length_scaler / 2 - KG_DIVIDER_WIDTH * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler)]))
-        self.bodies["divider_right"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(vertices=[(KG_BOARD_WIDTH * self.length_scaler / 2 + KG_DIVIDER_WIDTH * self.length_scaler / 2, 0), (KG_BOARD_WIDTH * self.length_scaler / 2 + KG_DIVIDER_WIDTH * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler)]))
-        self.bodies["ground"] = self.world.CreateStaticBody(position=(0,0))
-        
-        self.bodies["divider_left"].fixtures[0].filterData.categoryBits=0x0010
-        self.bodies["divider_right"].fixtures[0].filterData.categoryBits=0x0010
+        self.bodies["wall_bottom"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(0, 0), (KG_BOARD_WIDTH * self.length_scaler, 0)]))
+        self.bodies["wall_left"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(0, 0), (0, KG_BOARD_HEIGHT * self.length_scaler)]))
+        self.bodies["wall_right"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(KG_BOARD_WIDTH * self.length_scaler, 0),
+                      (KG_BOARD_WIDTH * self.length_scaler, KG_BOARD_HEIGHT * self.length_scaler)]))
+        self.bodies["wall_top"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(0, KG_BOARD_HEIGHT * self.length_scaler),
+                      (KG_BOARD_WIDTH * self.length_scaler, KG_BOARD_HEIGHT * self.length_scaler)]))
+        self.bodies["divider_left"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(KG_BOARD_WIDTH * self.length_scaler / 2 - KG_DIVIDER_WIDTH * self.length_scaler / 2, 0), (
+            KG_BOARD_WIDTH * self.length_scaler / 2 - KG_DIVIDER_WIDTH * self.length_scaler / 2,
+            KG_BOARD_HEIGHT * self.length_scaler)]))
+        self.bodies["divider_right"] = self.world.CreateStaticBody(position=(0, 0), shapes=edgeShape(
+            vertices=[(KG_BOARD_WIDTH * self.length_scaler / 2 + KG_DIVIDER_WIDTH * self.length_scaler / 2, 0), (
+            KG_BOARD_WIDTH * self.length_scaler / 2 + KG_DIVIDER_WIDTH * self.length_scaler / 2,
+            KG_BOARD_HEIGHT * self.length_scaler)]))
+        self.bodies["ground"] = self.world.CreateStaticBody(position=(0, 0))
+
+        self.bodies["divider_left"].fixtures[0].filterData.categoryBits = 0x0010
+        self.bodies["divider_right"].fixtures[0].filterData.categoryBits = 0x0010
 
         # Create dynamic bodies
-        self.bodies["puck1"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 3, KG_BOARD_HEIGHT * self.length_scaler / 2), fixedRotation=True, bullet=True)
-        self.bodies["puck1"].CreateCircleFixture(radius=KG_PUCK_RADIUS * self.length_scaler, restitution=0.0, userData=self.FixtureUserData("puck1", KG_PUCK_COLOR), density=KG_PUCK_MASS / (pi * (KG_PUCK_RADIUS * self.length_scaler)**2))
+        self.bodies["puck1"] = self.world.CreateDynamicBody(
+            position=(KG_BOARD_WIDTH * self.length_scaler / 3, KG_BOARD_HEIGHT * self.length_scaler / 2),
+            fixedRotation=True, bullet=True)
+        self.bodies["puck1"].CreateCircleFixture(radius=KG_PUCK_RADIUS * self.length_scaler, restitution=0.0,
+                                                 userData=self.FixtureUserData("puck1", KG_PUCK_COLOR),
+                                                 density=KG_PUCK_MASS / (
+                                                             pi * (KG_PUCK_RADIUS * self.length_scaler) ** 2))
 
-        self.bodies["puck2"] = self.world.CreateDynamicBody(position=(2 * KG_BOARD_WIDTH * self.length_scaler / 3, KG_BOARD_HEIGHT * self.length_scaler / 2), fixedRotation=True, bullet=True)
-        self.bodies["puck2"].CreateCircleFixture(radius=KG_PUCK_RADIUS * self.length_scaler, restitution=0.0, userData=self.FixtureUserData("puck2", KG_PUCK_COLOR), density=KG_PUCK_MASS / (pi * (KG_PUCK_RADIUS * self.length_scaler)**2))
+        self.bodies["puck2"] = self.world.CreateDynamicBody(
+            position=(2 * KG_BOARD_WIDTH * self.length_scaler / 3, KG_BOARD_HEIGHT * self.length_scaler / 2),
+            fixedRotation=True, bullet=True)
+        self.bodies["puck2"].CreateCircleFixture(radius=KG_PUCK_RADIUS * self.length_scaler, restitution=0.0,
+                                                 userData=self.FixtureUserData("puck2", KG_PUCK_COLOR),
+                                                 density=KG_PUCK_MASS / (
+                                                             pi * (KG_PUCK_RADIUS * self.length_scaler) ** 2))
 
-        ball_start_positions = {"top_right" : (KG_BOARD_WIDTH * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2),
-                                "bottom_right" : (KG_BOARD_WIDTH * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2, KG_CORNER_RADIUS * self.length_scaler / 2),
-                                "top_left" : (KG_CORNER_RADIUS * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2),
-                                "bottom_left" : (KG_CORNER_RADIUS * self.length_scaler / 2, KG_CORNER_RADIUS * self.length_scaler / 2)}
+        ball_start_positions = {"top_right": (
+        KG_BOARD_WIDTH * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2,
+        KG_BOARD_HEIGHT * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2),
+                                "bottom_right": (
+                                KG_BOARD_WIDTH * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2,
+                                KG_CORNER_RADIUS * self.length_scaler / 2),
+                                "top_left": (KG_CORNER_RADIUS * self.length_scaler / 2,
+                                             KG_BOARD_HEIGHT * self.length_scaler - KG_CORNER_RADIUS * self.length_scaler / 2),
+                                "bottom_left": (
+                                KG_CORNER_RADIUS * self.length_scaler / 2, KG_CORNER_RADIUS * self.length_scaler / 2)}
         ball_start_positions["random"] = choice(list(ball_start_positions.values()))
 
-        self.bodies["ball"] = self.world.CreateDynamicBody(position=ball_start_positions[ball_start_position], bullet=True)
-        self.bodies["ball"].CreateCircleFixture(radius=KG_BALL_RADIUS * self.length_scaler, restitution=KG_RESTITUTION_COEF, userData=self.FixtureUserData("ball", KG_BALL_COLOR), density=KG_BALL_MASS / (pi * (KG_BALL_RADIUS * self.length_scaler)**2), maskBits=0xFF0F)
+        self.bodies["ball"] = self.world.CreateDynamicBody(position=ball_start_positions[ball_start_position],
+                                                           bullet=True)
+        self.bodies["ball"].CreateCircleFixture(radius=KG_BALL_RADIUS * self.length_scaler,
+                                                restitution=KG_RESTITUTION_COEF,
+                                                userData=self.FixtureUserData("ball", KG_BALL_COLOR),
+                                                density=KG_BALL_MASS / (
+                                                            pi * (KG_BALL_RADIUS * self.length_scaler) ** 2),
+                                                maskBits=0xFF0F)
 
-        self.bodies["biscuit1"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler / 2), bullet=True)
-        self.bodies["biscuit1"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler, restitution=KG_RESTITUTION_COEF, userData=self.FixtureUserData("biscuit1", KG_BISCUIT_COLOR), density=KG_BISCUIT_MASS / (pi * (KG_BISCUIT_RADIUS * self.length_scaler)**2), maskBits=0xFF0F)
+        self.bodies["biscuit1"] = self.world.CreateDynamicBody(
+            position=(KG_BOARD_WIDTH * self.length_scaler / 2, KG_BOARD_HEIGHT * self.length_scaler / 2), bullet=True)
+        self.bodies["biscuit1"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler,
+                                                    restitution=KG_RESTITUTION_COEF,
+                                                    userData=self.FixtureUserData("biscuit1", KG_BISCUIT_COLOR),
+                                                    density=KG_BISCUIT_MASS / (
+                                                                pi * (KG_BISCUIT_RADIUS * self.length_scaler) ** 2),
+                                                    maskBits=0xFF0F)
 
-        self.bodies["biscuit2"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 2, (KG_BOARD_HEIGHT * self.length_scaler / 2) + KG_BISCUIT_START_OFFSET_Y * self.length_scaler), bullet=True)
-        self.bodies["biscuit2"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler, restitution=KG_RESTITUTION_COEF, userData=self.FixtureUserData("biscuit2", KG_BISCUIT_COLOR), density=KG_BISCUIT_MASS / (pi * (KG_BISCUIT_RADIUS * self.length_scaler)**2), maskBits=0xFF0F)
+        self.bodies["biscuit2"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 2, (
+                    KG_BOARD_HEIGHT * self.length_scaler / 2) + KG_BISCUIT_START_OFFSET_Y * self.length_scaler),
+                                                               bullet=True)
+        self.bodies["biscuit2"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler,
+                                                    restitution=KG_RESTITUTION_COEF,
+                                                    userData=self.FixtureUserData("biscuit2", KG_BISCUIT_COLOR),
+                                                    density=KG_BISCUIT_MASS / (
+                                                                pi * (KG_BISCUIT_RADIUS * self.length_scaler) ** 2),
+                                                    maskBits=0xFF0F)
 
-        self.bodies["biscuit3"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 2, (KG_BOARD_HEIGHT * self.length_scaler / 2) - KG_BISCUIT_START_OFFSET_Y * self.length_scaler), bullet=True)
-        self.bodies["biscuit3"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler, restitution=KG_RESTITUTION_COEF, userData=self.FixtureUserData("biscuit3", KG_BISCUIT_COLOR), density=KG_BISCUIT_MASS / (pi * (KG_BISCUIT_RADIUS * self.length_scaler)**2), maskBits=0xFF0F)
+        self.bodies["biscuit3"] = self.world.CreateDynamicBody(position=(KG_BOARD_WIDTH * self.length_scaler / 2, (
+                    KG_BOARD_HEIGHT * self.length_scaler / 2) - KG_BISCUIT_START_OFFSET_Y * self.length_scaler),
+                                                               bullet=True)
+        self.bodies["biscuit3"].CreateCircleFixture(radius=KG_BISCUIT_RADIUS * self.length_scaler,
+                                                    restitution=KG_RESTITUTION_COEF,
+                                                    userData=self.FixtureUserData("biscuit3", KG_BISCUIT_COLOR),
+                                                    density=KG_BISCUIT_MASS / (
+                                                                pi * (KG_BISCUIT_RADIUS * self.length_scaler) ** 2),
+                                                    maskBits=0xFF0F)
 
         # Create groupings
         self.magnet_bodies = ["biscuit1", "biscuit2", "biscuit3"]
         self.render_bodies = ["puck1", "puck2", "ball", "biscuit1", "biscuit2", "biscuit3"]
 
         # Create joints
-        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["ball"], maxForce=self.bodies["ball"].mass*KG_GRAVITY)
-        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit1"], maxForce=self.bodies["biscuit1"].mass*KG_GRAVITY)
-        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit2"], maxForce=self.bodies["biscuit2"].mass*KG_GRAVITY)
-        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit3"], maxForce=self.bodies["biscuit3"].mass*KG_GRAVITY)
+        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["ball"],
+                                       maxForce=self.bodies["ball"].mass * KG_GRAVITY)
+        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit1"],
+                                       maxForce=self.bodies["biscuit1"].mass * KG_GRAVITY)
+        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit2"],
+                                       maxForce=self.bodies["biscuit2"].mass * KG_GRAVITY)
+        self.world.CreateFrictionJoint(bodyA=self.bodies["ground"], bodyB=self.bodies["biscuit3"],
+                                       maxForce=self.bodies["biscuit3"].mass * KG_GRAVITY)
 
         # Render frame
         frame = self.__render_frame()
@@ -162,7 +224,6 @@ class KlaskSimulator():
 
         # Return environment state information
         return frame, game_states, agent_states
-
     def __collide_with_ball_reward(self, player: PlayerPuck):
         puck_position = self.bodies[player.value].position
         ball_position = self.bodies["ball"].position
@@ -172,9 +233,9 @@ class KlaskSimulator():
 
         # Check if the distance is less than the sum of their radii
         if distance < (KG_PUCK_RADIUS + KG_BALL_RADIUS) * self.length_scaler:
-            return self.RewardState.HIT_BALL.value
+            return 0.1
         else:
-            return self.RewardState.PLAYING.value
+            return 0
 
     def __is_ball_left_side(self, x_pos) -> bool:
         return x_pos < (KG_BOARD_WIDTH * self.length_scaler / 2)
@@ -183,20 +244,64 @@ class KlaskSimulator():
         return x_pos > (KG_BOARD_WIDTH * self.length_scaler / 2)
 
     def __ball_move_reward(self, player: PlayerPuck, game_states) -> float:
-        is_ball_move: bool = game_states[22] > 0.001 or game_states[23] > 0.001
+        x_pos = game_states[20]
+        is_ball_move: bool = game_states[22] or game_states[23]
 
-        if player is self.PlayerPuck.P1 and self.__is_ball_left_side(game_states[20]):
-            return 1 if is_ball_move else -10
-        elif player is self.PlayerPuck.P2 and self.__is_ball_right_side(game_states[20]):
-            return 1 if is_ball_move else -10
+        if player is self.PlayerPuck.P1 and self.__is_ball_right_side(x_pos) and is_ball_move:
+            return 0.025
+        elif player is self.PlayerPuck.P1 and self.__is_ball_left_side(x_pos) and not is_ball_move:
+            return -0.025
+        elif player is self.PlayerPuck.P2 and self.__is_ball_left_side(x_pos) and is_ball_move:
+            return 0.025
+        elif player is self.PlayerPuck.P2 and self.__is_ball_right_side(x_pos) and not is_ball_move:
+            return -0.025
         else:
             return 0
+
+    def __ball_position_reward(self, player: PlayerPuck, game_states):
+        x_pos_ball = game_states[20]
+        x_pos_player = game_states[12] if player == self.PlayerPuck.P1 else game_states[16]
+
+        if x_pos_ball < x_pos_player and player == self.PlayerPuck.P1:
+            return -0.1
+        elif x_pos_ball > x_pos_player and player == self.PlayerPuck.P2:
+            return -0.1
+        return 0
 
     def __calculate_reward(self, player: PlayerPuck, state: RewardState, game_states) -> float:
         reward = 0.0
 
-        reward += state.value
+        def __define_state_reward():
+            if state == self.RewardState.PLAYING:
+                return 0
+            elif state == self.RewardState.PUCK_IN_GOAL:
+                return 0
+            elif state == self.RewardState.BALL_IN_GOAL:
+                return 1
+            elif state == self.RewardState.MAGNET:
+                return 1
+            elif state == self.RewardState.ONE_MAGNET:
+                return 1
+            elif state == self.RewardState.SELF_PUCK_IN_GOAL:
+                return -1
+            elif state == self.RewardState.SELF_BALL_IN_GOAL:
+                return -1
+            elif state == self.RewardState.SELF_MAGNET:
+                return -1
+            elif state == self.RewardState.SELF_ONE_MAG:
+                return -1
+            elif state == self.RewardState.HIT_BALL:
+                return 0.1
+            else:
+                return 0
+
+        reward += __define_state_reward()
+        if player is self.PlayerPuck.P1 and reward != 0.0:
+            print(reward)
+
         reward += self.__collide_with_ball_reward(player)
+        reward += self.__ball_position_reward(player, game_states)
+        # reward += self.__ball_stationary(player, game_states)
         reward += self.__ball_move_reward(player, game_states)
 
         return reward
@@ -240,13 +345,14 @@ class KlaskSimulator():
         frame = self.__render_frame()
 
         # Determine game states
-        game_state = self.__game_state(puck_player)
+        game_state = self.game_state(puck_player)
 
         # Determine agent states
         agent_states = self.determine_agent_state()
 
         # Calculate reward
-        reward = self.__calculate_reward(puck_player, game_state, agent_states)
+        # reward = self.__calculate_reward(puck_player, game_state, agent_states)
+        reward = 0
 
         # Return environment state information
         return frame, game_state, agent_states, reward, self.p1_score if puck_player is self.PlayerPuck.P1 else self.p2_score
@@ -269,7 +375,7 @@ class KlaskSimulator():
                 biscuit_pos_y = fixture.body.position.y + fixture.shape.pos.y
                 biscuit_vel_x = fixture.body.linearVelocity.x
                 biscuit_vel_y = fixture.body.linearVelocity.y
-            
+
             return biscuit_pos_x, biscuit_pos_y, biscuit_vel_x, biscuit_vel_y
 
         # Get biscuit 1 states
@@ -325,58 +431,57 @@ class KlaskSimulator():
                         ball_vel_x,
                         ball_vel_y
                         )
-        
         return state_vector
 
-    def __game_state(self, player: PlayerPuck) -> RewardState:
+    def game_state(self, player: PlayerPuck) -> RewardState:
         # TODO: Remove negative scoring, used to track how well agent is doing
         if player is self.PlayerPuck.P1:
-            if self.__is_in_goal(self.bodies["puck2"])[1]:
-                self.p1_score += 1
-                return self.RewardState.PUCK_IN_GOAL
-            elif self.__is_in_goal(self.bodies["ball"])[1]:
+            # if self.__is_in_goal(self.bodies["puck2"])[1]:
+            #     self.p1_score += 1
+            #     return self.RewardState.PUCK_IN_GOAL
+            if self.__is_in_goal(self.bodies["ball"])[1]:
                 self.p1_score += 1
                 return self.RewardState.BALL_IN_GOAL
-            elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
-                return self.RewardState.ONE_MAGNET
+            # elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
+            #     return self.RewardState.ONE_MAGNET
             elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 2:
                 self.p1_score += 1
                 return self.RewardState.MAGNET
 
-            if self.__is_in_goal(self.bodies["puck1"])[0]:
-                self.p1_score -= 1
-                return self.RewardState.SELF_PUCK_IN_GOAL
-            elif self.__is_in_goal(self.bodies["ball"])[0]:
+            # if self.__is_in_goal(self.bodies["puck1"])[0]:
+            #     self.p1_score -= 1
+            #     return self.RewardState.SELF_PUCK_IN_GOAL
+            if self.__is_in_goal(self.bodies["ball"])[0]:
                 self.p1_score -= 1
                 return self.RewardState.SELF_BALL_IN_GOAL
-            elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
-                return self.RewardState.SELF_ONE_MAG
+            # elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
+            #     return self.RewardState.SELF_ONE_MAG
             elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 2:
                 self.p1_score -= 1
                 return self.RewardState.SELF_MAGNET
 
             return self.RewardState.PLAYING
         else:
-            if self.__is_in_goal(self.bodies["puck1"])[0]:
-                self.p2_score += 1
-                return self.RewardState.PUCK_IN_GOAL
-            elif self.__is_in_goal(self.bodies["ball"])[0]:
+            # if self.__is_in_goal(self.bodies["puck1"])[0]:
+            #     self.p2_score += 1
+            #     return self.RewardState.PUCK_IN_GOAL
+            if self.__is_in_goal(self.bodies["ball"])[0]:
                 self.p2_score += 1
                 return self.RewardState.BALL_IN_GOAL
-            elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
-                return self.RewardState.ONE_MAGNET
+            # elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 1:
+            #     return self.RewardState.ONE_MAGNET
             elif self.__num_biscuits_on_puck(self.bodies["puck1"]) >= 2:
                 self.p2_score += 1
                 return self.RewardState.MAGNET
 
-            if self.__is_in_goal(self.bodies["puck2"])[1]:
-                self.p2_score -= 1
-                return self.RewardState.SELF_PUCK_IN_GOAL
-            elif self.__is_in_goal(self.bodies["ball"])[1]:
+            # if self.__is_in_goal(self.bodies["puck2"])[1]:
+            #     self.p2_score -= 1
+            #     return self.RewardState.SELF_PUCK_IN_GOAL
+            if self.__is_in_goal(self.bodies["ball"])[1]:
                 self.p2_score -= 1
                 return self.RewardState.SELF_BALL_IN_GOAL
-            elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
-                return self.RewardState.SELF_ONE_MAG
+            # elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 1:
+            #     return self.RewardState.SELF_ONE_MAG
             elif self.__num_biscuits_on_puck(self.bodies["puck2"]) >= 2:
                 self.p2_score -= 1
                 return self.RewardState.SELF_MAGNET

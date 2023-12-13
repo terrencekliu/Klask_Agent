@@ -102,8 +102,8 @@ while running:
     p1_action = p1.getAction()
     p2_action = p2.getAction()
 
-    sim.step((p1_action[0] * 1000, p1_action[1] * 1000), sim.PlayerPuck.P1)
-    sim.step((p2_action[0] * 1000, p2_action[1] * 1000), sim.PlayerPuck.P2)
+    sim.step((p1_action[0] * 10000, p1_action[1] * 10000), sim.PlayerPuck.P1)
+    sim.step((p2_action[0] * 10000, p2_action[1] * 10000), sim.PlayerPuck.P2)
 
 
 sim.close()
